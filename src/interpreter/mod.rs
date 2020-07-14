@@ -1,3 +1,6 @@
+use std::{thread, time};
+
+
 // Instructions associated with their decode scheme
 #[derive(Debug)]
 enum Instruction {
@@ -99,94 +102,338 @@ fn decode(byte_code: u16) -> Instruction {
 }
 
 pub struct Interpreter {
-    program: Vec<u16>,
-    program_counter: usize,
-    stack: Vec<u16>,
-    registers: [u8; 16],
-    i_reg: u16,
-    dt_reg: u8,
-    st_reg: u8,
+    mem: Memory,
+    screen: Screen,
     running: bool,
 }
 
 impl Interpreter {
     pub fn new(program: Vec<u16>) -> Self {
         Interpreter{ 
-            program, 
-            program_counter: 0, 
-            stack: vec![],
-            registers: [0x00; 16],
-            i_reg: 0x0000,
-            dt_reg: 0x00,
-            st_reg: 0x00,
-            running: false}
+            mem: Memory::new(program),
+            screen: Screen::new(),
+            running: false
+        }
     }
 
     pub fn interpret(&mut self) {
         self.running = true;
-        while self.running && self.program_counter < self.program.len() {
-            let byte_code = self.program[self.program_counter];
+        while self.running {
+            let byte_code = self.mem.fetch_instruction();
             let instruction = decode(byte_code);
             use Instruction::*;
             println!("{:?}", instruction);
+            // self.screen.print();
             match instruction {
                 ReturnFromSubroutine => {
-                    if let Some(addr) = self.stack.pop() {
-                        self.program_counter = addr as usize;
+                    if let Some(addr) = self.mem.pop_stack() {
+                        self.mem.set_pc(addr);
                     } else {
                         self.running = false;
                         eprintln!("Attempted to pop from an empty stack!");
                     }
                 },
-                JumpToLoc(addr) => self.program_counter = addr as usize,
+                JumpToLoc(addr) => self.mem.set_pc(addr),
                 CallSubroutine(addr) => {
-                    self.stack.push(addr);
-                    self.program_counter = addr as usize;
+                    self.mem.push_stack(addr);
+                    self.mem.set_pc(addr);
                     println!("{:X}", byte_code);
                 },
                 SkipEq(reg_idx, byte) => {
-                    if self.registers[reg_idx as usize] == byte {
-                        self.program_counter += 2;
+                    if self.mem.get_reg(reg_idx) == byte {
+                        self.mem.double_inc_pc();
                     } else {
-                        self.program_counter += 1;
+                        self.mem.inc_pc();
                     }
                 },
                 SkipNeq(reg_idx, byte) => {
-                    if self.registers[reg_idx as usize] != byte {
-                        self.program_counter += 2;
+                    if self.mem.get_reg(reg_idx) != byte {
+                        self.mem.double_inc_pc();
                     } else {
-                        self.program_counter += 1;
+                        self.mem.inc_pc();
                     }
                 },
                 SkipRegsEq(reg_idx, reg_idy) => {
-                    if self.registers[reg_idx as usize] == self.registers[reg_idy as usize] {
-                        self.program_counter += 2;
+                    if self.mem.get_reg(reg_idx) == self.mem.get_reg(reg_idy) {
+                        self.mem.double_inc_pc();
                     } else {
-                        self.program_counter += 1;
+                        self.mem.inc_pc();
                     }
                 },
                 SetReg(reg_idx, byte) => {
-                    self.registers[reg_idx as usize] = byte;
-                    self.program_counter += 1;
-                }
+                    self.mem.set_reg(reg_idx, byte);
+                    self.mem.inc_pc();
+                },
                 AddReg(reg_idx, byte) => {
-                    self.registers[reg_idx as usize] = self.registers[reg_idx as usize] + byte;
-                    self.program_counter += 1;
-                }
+                    let sum = self.mem.get_reg(reg_idx) + byte;
+                    self.mem.set_reg(reg_idx, sum);
+                    self.mem.inc_pc();
+                },
                 SetRegFromReg(reg_idx, reg_idy) => {
-                    self.registers[reg_idx as usize] = self.registers[reg_idy as usize];
-                    self.program_counter += 1;
-                }
+                    self.mem.set_reg(reg_idx, self.mem.get_reg(reg_idy));
+                    self.mem.inc_pc();
+                },
+                BitwiseOr(reg_idx, reg_idy) => {
+                    let or = self.mem.get_reg(reg_idx) | self.mem.get_reg(reg_idy);
+                    self.mem.set_reg(reg_idx, or);
+                    self.mem.inc_pc();
+                },
+                BitwiseAnd(reg_idx, reg_idy) => {
+                    let and = self.mem.get_reg(reg_idx) & self.mem.get_reg(reg_idy);
+                    self.mem.set_reg(reg_idx, and);
+                    self.mem.inc_pc();
+                },
+                BitwiseXor(reg_idx, reg_idy) => {
+                    let xor = self.mem.get_reg(reg_idx) ^ self.mem.get_reg(reg_idy);
+                    self.mem.set_reg(reg_idx, xor);
+                    self.mem.inc_pc();
+                },
+                AddRegWithCarry(reg_idx, reg_idy) => {
+                    let sum = self.mem.get_reg(reg_idx) as u16 + self.mem.get_reg(reg_idy) as u16;
+                    if sum > 255 {
+                        self.mem.set_reg(0x0F, 0x01);
+                    } else {
+                        self.mem.set_reg(0x0F, 0x01);
+                    }
+                    self.mem.set_reg(reg_idx, sum as u8);
+                    self.mem.inc_pc();
+                },
+                SubReg(reg_idx, reg_idy) => {
+                    let diff = self.mem.get_reg(reg_idx) as u16 - self.mem.get_reg(reg_idy) as u16;
+                    if self.mem.get_reg(reg_idx) > self.mem.get_reg(reg_idy) {
+                        self.mem.set_reg(0x0F, 0x01);
+                    } else {
+                        self.mem.set_reg(0x0F, 0x01);
+                    }
+                    self.mem.set_reg(reg_idx, diff as u8);
+                    self.mem.inc_pc();
+                },
+                ShiftRight(reg_idx, _) => {
+                    let lsb = self.mem.get_reg(reg_idx) & 0x01;
+                    self.mem.set_reg(0x0F, lsb);
+                    self.mem.set_reg(reg_idx, self.mem.get_reg(reg_idx) / 2);
+                    self.mem.inc_pc();
+                },
+                SubRegBackwards(reg_idx, reg_idy) => {
+                    let diff = self.mem.get_reg(reg_idy) as u16 - self.mem.get_reg(reg_idx) as u16;
+                    if self.mem.get_reg(reg_idy) > self.mem.get_reg(reg_idx) {
+                        self.mem.set_reg(0x0F, 0x01);
+                    } else {
+                        self.mem.set_reg(0x0F, 0x01);
+                    }
+                    self.mem.set_reg(reg_idx, diff as u8);
+                    self.mem.inc_pc();
+                },
+                ShiftLeft(reg_idx, _) => {
+                    let msb = (self.mem.get_reg(reg_idx) & 0x80) >> 7;
+                    self.mem.set_reg(0x0F, msb);
+                    self.mem.set_reg(reg_idx, self.mem.get_reg(reg_idx) * 2);
+                },
+                SkipRegsNeq(reg_idx, reg_idy) => {
+                    if self.mem.get_reg(reg_idx) != self.mem.get_reg(reg_idy) {
+                        self.mem.double_inc_pc();
+                    } else {
+                        self.mem.inc_pc();
+                    }
+                },
+                SetI(addr) => {
+                    self.mem.set_ireg(addr);
+                    self.mem.inc_pc();
+                },
+                JumpToLocRel(offset) => {
+                    self.mem.set_pc(offset + self.mem.get_reg(0x00) as u16);
+                },
+                Random(reg_idx, byte) => {
+                    use rand::Rng;
+                    let mut rng = rand::thread_rng();
+                    let random: u8 = rng.gen();
+                    self.mem.set_reg(reg_idx, random & byte);
+                    self.mem.inc_pc();
+                },
+                DrawSprite(reg_idx, reg_idy, n) => {
+                    let x = self.mem.get_reg(reg_idx);
+                    let y = self.mem.get_reg(reg_idy);
+                    let mut bytes = Vec::new();
+                    let i = self.mem.get_ireg();
+                    for offset in 0..n {
+                        let addr = i + offset as u16;
+                        let byte = self.mem.get(addr as usize);
+                        bytes.push(byte);
+                    }
+                    self.screen.display_byte_sprite(x as usize, y as usize, bytes);
+                    self.mem.inc_pc();
+                },
+                // SkipIfPressed(u8), // Vx
+                // SkipIfNotPressed(u8), // Vx
+                // SetRegToDelayTimer(u8), // Vx
+                // BlockOnKeypress(u8), // Vx
+                // SetDelayTimer(u8), // Vx
+                // SetSoundTimer(u8), // Vx
+                // AddI(u8), // Vx
+                // LoadSprite(u8), // Vx
+                // ToDecimal(u8), // Vx
+                // CopyRegsIntoMemory(u8), // Vx
+                // CopyRegsFromMemory(u8), // Vx
 
                 InvalidInstruction(byte_code) => {
                     println!("Error: {:X} unrecognized", byte_code);
-                    self.program_counter += 1;
+                    return
                 }
                 _ => {
                     println!("{:?} not implemented yet", instruction);
-                    self.program_counter += 1;
+                    self.mem.inc_pc();
                 },
             }
+            thread::sleep(time::Duration::from_millis(10));
         }
+    }
+}
+
+struct Memory {
+    ram: [u8; 0xFFF],
+    program_addr: usize,
+    program_counter: usize,
+    stack: Vec<u16>,
+    registers: [u8; 16],
+    i_reg: u16,
+    dt_reg: u8,
+    st_reg: u8,
+}
+
+impl Memory {
+    fn new(program: Vec<u16>) -> Self {
+        let mut mem = Memory {
+            ram: [0x00; 0xFFF],
+            program_addr: 0x200,
+            program_counter: 0x200,
+            stack: Vec::new(),
+            registers: [0x00; 16],
+            i_reg: 0x0000,
+            dt_reg: 0x00,
+            st_reg: 0x00,
+        };
+        mem.load_program(program);
+        return mem;
+    }
+
+    fn load_program(&mut self, program: Vec<u16>) {
+        let mut addr = self.program_addr;
+        for instruction in program {
+            let first_byte = ((instruction & 0xFF00) >> 8) as u8;
+            let second_byte = (instruction & 0x00FF) as u8;
+            self.set(addr, first_byte);
+            self.set(addr+1, second_byte);
+            addr += 2;
+        }
+    }
+
+    fn fetch_instruction(&self) -> u16 {
+        let first_byte = self.ram[self.program_counter];
+        let second_byte = self.ram[self.program_counter + 1];
+        return ((first_byte as u16) << 8) | (second_byte as u16);
+    }
+
+    fn inc_pc(&mut self) {
+        self.program_counter += 2;
+    }
+
+    fn double_inc_pc(&mut self) {
+        self.program_counter += 4;
+    }
+
+    fn get_reg(&self, reg: u8) -> u8 {
+        return self.registers[reg as usize];
+    }
+
+    fn set_reg(&mut self, reg: u8, value: u8) {
+        self.registers[reg as usize] = value
+    }
+
+    fn get_ireg(&self) -> u16 {
+        return self.i_reg;
+    }
+
+    fn set_ireg(&mut self, value: u16) {
+        self.i_reg = value;
+    }
+
+    fn get_dt_reg(&self) -> u8 {
+        return self.dt_reg;
+    }
+
+    fn set_dt_reg(&mut self, value: u8) {
+        self.dt_reg = value;
+    }
+
+    fn get_st_reg(&self) -> u8 {
+        return self.st_reg;
+    }
+
+    fn set_st_reg(&mut self, value: u8) {
+        self.st_reg = value;
+    }
+
+    fn set_pc(&mut self, pc: u16) {
+        self.program_counter = pc as usize;
+    }
+
+    fn push_stack(&mut self, data: u16) {
+        self.stack.push(data);
+    }
+
+    fn pop_stack(&mut self) -> Option<u16> {
+        return self.stack.pop()
+    }
+
+    fn get(&self, addr: usize) -> u8 {
+        return self.ram[addr];
+    }
+
+    fn set(&mut self, addr: usize, value: u8) {
+        self.ram[addr] = value;
+    }
+}
+
+const WIDTH: usize = 80;
+const HEIGHT: usize = 64;
+
+struct Screen<> {
+    // TODO make this configurable
+    matrix: [[bool; 80]; 64],
+}
+
+impl Screen {
+    fn new() -> Self {
+        return Screen { matrix: [[false; 80]; 64] };
+    }
+
+    fn display_byte_sprite(&mut self, x: usize, y: usize, bytes: Vec<u8>) -> bool {
+        for (i, byte) in bytes.iter().enumerate() {
+            for j in 0..8 {
+                let bit = (*byte & (0x80 >> j)) >> (7-j);
+                let mut pixel_state: bool = false;
+                match bit {
+                    0x00 => pixel_state = false,
+                    0x01 => pixel_state = true,
+                    _ => eprintln!("bit is in invalid state"),
+                }
+                self.matrix[(y+i) % HEIGHT][(x+j) & WIDTH] ^= pixel_state;
+            }
+        }
+        // TODO return true if occluded
+        return false;
+    }
+
+    fn print(&self) {
+        for row in self.matrix.iter() {
+            for pixel in row.iter() {
+                match *pixel {
+                    true => print!("x"),
+                    false => print!("o"),
+                }
+            }
+            println!("")
+        }
+        println!("\n\n\n\n")
     }
 }
