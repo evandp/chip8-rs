@@ -1,5 +1,6 @@
+use crate::display::DisplayState;
 use std::{thread, time};
-
+use std::sync::{Mutex, Arc};
 
 // Instructions associated with their decode scheme
 #[derive(Debug)]
@@ -103,16 +104,27 @@ fn decode(byte_code: u16) -> Instruction {
 
 pub struct Interpreter {
     mem: Memory,
-    screen: Screen,
+    display: Arc<Mutex<DisplayState>>,
     running: bool,
 }
 
 impl Interpreter {
-    pub fn new(program: Vec<u16>) -> Self {
-        Interpreter{ 
+    pub fn new(program: Vec<u16>, display: Arc<Mutex<DisplayState>>) -> Self {
+        Self { 
             mem: Memory::new(program),
-            screen: Screen::new(),
+            display: display,
             running: false
+        }
+    }
+
+    pub fn print_program(&mut self) {
+        for _ in 0..150 {
+            let byte_code = self.mem.fetch_instruction();
+            let instruction = decode(byte_code);
+            let address = self.mem.get_pc();
+            use Instruction::*;
+            println!("{:?}: {:?}", address, instruction);
+            self.mem.inc_pc();
         }
     }
 
@@ -120,9 +132,10 @@ impl Interpreter {
         self.running = true;
         while self.running {
             let byte_code = self.mem.fetch_instruction();
+            let address = self.mem.get_pc();
             let instruction = decode(byte_code);
             use Instruction::*;
-            println!("{:?}", instruction);
+            println!("{:?}: {:?}", address, instruction);
             // self.screen.print();
             match instruction {
                 ReturnFromSubroutine => {
@@ -135,7 +148,7 @@ impl Interpreter {
                 },
                 JumpToLoc(addr) => self.mem.set_pc(addr),
                 CallSubroutine(addr) => {
-                    self.mem.push_stack(addr);
+                    self.mem.push_stack(self.mem.get_pc() as u16 + 2);
                     self.mem.set_pc(addr);
                     println!("{:X}", byte_code);
                 },
@@ -260,7 +273,7 @@ impl Interpreter {
                         let byte = self.mem.get(addr as usize);
                         bytes.push(byte);
                     }
-                    self.screen.display_byte_sprite(x as usize, y as usize, bytes);
+                    self.display_byte_sprite(x as usize, y as usize, bytes);
                     self.mem.inc_pc();
                 },
                 // SkipIfPressed(u8), // Vx
@@ -284,8 +297,25 @@ impl Interpreter {
                     self.mem.inc_pc();
                 },
             }
-            thread::sleep(time::Duration::from_millis(10));
+            thread::sleep(time::Duration::from_millis(1));
         }
+    }
+
+    fn display_byte_sprite(&mut self, x: usize, y: usize, bytes: Vec<u8>) -> bool {
+        for (i, byte) in bytes.iter().enumerate() {
+            for j in 0..8 {
+                let bit = (*byte & (0x80 >> j)) >> (7-j);
+                let mut pixel_state: bool = false;
+                match bit {
+                    0x00 => pixel_state = false,
+                    0x01 => pixel_state = true,
+                    _ => eprintln!("bit is in invalid state"),
+                }
+                self.display.lock().unwrap().set_pixel(x+j, y+i, pixel_state);
+            }
+        }
+        // TODO return true if occluded
+        return false;
     }
 }
 
@@ -373,9 +403,14 @@ impl Memory {
         self.st_reg = value;
     }
 
+    fn get_pc(&self) -> usize {
+        return self.program_counter;
+    }
+
     fn set_pc(&mut self, pc: u16) {
         self.program_counter = pc as usize;
     }
+
 
     fn push_stack(&mut self, data: u16) {
         self.stack.push(data);
@@ -391,49 +426,5 @@ impl Memory {
 
     fn set(&mut self, addr: usize, value: u8) {
         self.ram[addr] = value;
-    }
-}
-
-const WIDTH: usize = 80;
-const HEIGHT: usize = 64;
-
-struct Screen<> {
-    // TODO make this configurable
-    matrix: [[bool; 80]; 64],
-}
-
-impl Screen {
-    fn new() -> Self {
-        return Screen { matrix: [[false; 80]; 64] };
-    }
-
-    fn display_byte_sprite(&mut self, x: usize, y: usize, bytes: Vec<u8>) -> bool {
-        for (i, byte) in bytes.iter().enumerate() {
-            for j in 0..8 {
-                let bit = (*byte & (0x80 >> j)) >> (7-j);
-                let mut pixel_state: bool = false;
-                match bit {
-                    0x00 => pixel_state = false,
-                    0x01 => pixel_state = true,
-                    _ => eprintln!("bit is in invalid state"),
-                }
-                self.matrix[(y+i) % HEIGHT][(x+j) & WIDTH] ^= pixel_state;
-            }
-        }
-        // TODO return true if occluded
-        return false;
-    }
-
-    fn print(&self) {
-        for row in self.matrix.iter() {
-            for pixel in row.iter() {
-                match *pixel {
-                    true => print!("x"),
-                    false => print!("o"),
-                }
-            }
-            println!("")
-        }
-        println!("\n\n\n\n")
     }
 }

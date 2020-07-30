@@ -1,9 +1,14 @@
 mod interpreter;
+mod display;
 
 use interpreter::Interpreter;
+use display::*;
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
+use std::sync::Mutex;
+use std::sync::Arc;
+use std::thread;
 
 fn main() -> io::Result<()> {
     let mut f = File::open("roms/MAZE")?;
@@ -23,7 +28,15 @@ fn main() -> io::Result<()> {
             first_byte = true;
         }
     }
-    let mut interpreter = Interpreter::new(instructions);
+    let display_state = Arc::new(Mutex::new(DisplayState::new()));
+    let clone = display_state.clone();
+    let mut interpreter = Interpreter::new(instructions, clone);
+    thread::spawn(|| {
+        let mut display = Display::new("Test title".to_string(), display_state);
+        display.start();
+    });
+    // interpreter.print_program();
     interpreter.interpret();
+
     Ok(())
 }
