@@ -1,4 +1,4 @@
-use crate::display::DisplayState;
+use crate::game::{GameState, KeyState};
 use std::{thread, time};
 use std::sync::{Mutex, Arc};
 
@@ -104,15 +104,15 @@ fn decode(byte_code: u16) -> Instruction {
 
 pub struct Interpreter {
     mem: Memory,
-    display: Arc<Mutex<DisplayState>>,
+    game: Arc<Mutex<GameState>>,
     running: bool,
 }
 
 impl Interpreter {
-    pub fn new(program: Vec<u16>, display: Arc<Mutex<DisplayState>>) -> Self {
+    pub fn new(program: Vec<u16>, game: Arc<Mutex<GameState>>) -> Self {
         Self { 
             mem: Memory::new(program),
-            display: display,
+            game: game,
             running: false
         }
     }
@@ -276,10 +276,37 @@ impl Interpreter {
                     self.display_byte_sprite(x as usize, y as usize, bytes);
                     self.mem.inc_pc();
                 },
-                // SkipIfPressed(u8), // Vx
-                // SkipIfNotPressed(u8), // Vx
+                SkipIfPressed(reg_idx) => {
+                    let key_id = self.mem.get_reg(reg_idx);
+                    if self.game.lock().unwrap().get_key_state(key_id) == KeyState::Pressed {
+                        self.mem.double_inc_pc();
+                    } else {
+                        self.mem.inc_pc();
+                    }
+                },
+                SkipIfNotPressed(reg_idx) => {
+                    let key_id = self.mem.get_reg(reg_idx);
+                    if self.game.lock().unwrap().get_key_state(key_id) == KeyState::Released {
+                        self.mem.double_inc_pc();
+                    } else {
+                        self.mem.inc_pc();
+                    }
+                },
                 // SetRegToDelayTimer(u8), // Vx
-                // BlockOnKeypress(u8), // Vx
+                BlockOnKeypress(reg_idx) => {
+                    let mut blocked = true;
+                    while blocked {
+                        let state = self.game.lock().unwrap();
+                        for key_id in 0..16 {
+                            if state.get_key_state(key_id) == KeyState::Pressed {
+                                blocked = false;
+                                self.mem.set_reg(reg_idx, key_id);
+                            }
+                        }
+                        thread::sleep(time::Duration::from_millis(1));
+                    }
+                    self.mem.inc_pc();
+                },
                 // SetDelayTimer(u8), // Vx
                 // SetSoundTimer(u8), // Vx
                 // AddI(u8), // Vx
@@ -311,7 +338,7 @@ impl Interpreter {
                     0x01 => pixel_state = true,
                     _ => eprintln!("bit is in invalid state"),
                 }
-                self.display.lock().unwrap().set_pixel(x+j, y+i, pixel_state);
+                self.game.lock().unwrap().set_pixel(x+j, y+i, pixel_state);
             }
         }
         // TODO return true if occluded

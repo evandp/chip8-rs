@@ -1,8 +1,8 @@
 mod interpreter;
-mod display;
+mod game;
 
 use interpreter::Interpreter;
-use display::*;
+use game::*;
 use std::io;
 use std::io::prelude::*;
 use std::fs::File;
@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::thread;
 
 fn main() -> io::Result<()> {
-    let mut f = File::open("roms/MAZE")?;
+    let mut f = File::open("roms/PONG2")?;
     let mut read_buffer = Vec::new();
     f.read_to_end(&mut read_buffer)?;
     let mut first_byte = true;
@@ -28,11 +28,11 @@ fn main() -> io::Result<()> {
             first_byte = true;
         }
     }
-    let display_state = Arc::new(Mutex::new(DisplayState::new()));
+    let display_state = Arc::new(Mutex::new(GameState::new()));
     let clone = display_state.clone();
     let mut interpreter = Interpreter::new(instructions, clone);
     thread::spawn(|| {
-        let mut display = Display::new("Test title".to_string(), display_state);
+        let mut display = Game::new("Test title".to_string(), display_state);
         display.start();
     });
     // interpreter.print_program();
