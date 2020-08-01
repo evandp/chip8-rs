@@ -1,6 +1,7 @@
 use crate::game::{GameState, KeyState};
 use std::{thread, time};
 use std::sync::{Mutex, Arc};
+use std::num::Wrapping;
 
 // Instructions associated with their decode scheme
 #[derive(Debug)]
@@ -178,7 +179,7 @@ impl Interpreter {
                     self.mem.inc_pc();
                 },
                 AddReg(reg_idx, byte) => {
-                    let sum = self.mem.get_reg(reg_idx) + byte;
+                    let sum = (Wrapping(self.mem.get_reg(reg_idx)) + Wrapping(byte)).0;
                     self.mem.set_reg(reg_idx, sum);
                     self.mem.inc_pc();
                 },
@@ -202,23 +203,24 @@ impl Interpreter {
                     self.mem.inc_pc();
                 },
                 AddRegWithCarry(reg_idx, reg_idy) => {
-                    let sum = self.mem.get_reg(reg_idx) as u16 + self.mem.get_reg(reg_idy) as u16;
-                    if sum > 255 {
+                    let sum = (Wrapping(self.mem.get_reg(reg_idx)) + Wrapping(self.mem.get_reg(reg_idy))).0;
+                    let carry = self.mem.get_reg(reg_idx) as u16 + self.mem.get_reg(reg_idy) as u16 > 255;
+                    if carry {
                         self.mem.set_reg(0x0F, 0x01);
                     } else {
                         self.mem.set_reg(0x0F, 0x01);
                     }
-                    self.mem.set_reg(reg_idx, sum as u8);
+                    self.mem.set_reg(reg_idx, sum);
                     self.mem.inc_pc();
                 },
                 SubReg(reg_idx, reg_idy) => {
-                    let diff = self.mem.get_reg(reg_idx) as u16 - self.mem.get_reg(reg_idy) as u16;
+                    let diff = (Wrapping(self.mem.get_reg(reg_idx)) - Wrapping(self.mem.get_reg(reg_idy))).0;
                     if self.mem.get_reg(reg_idx) > self.mem.get_reg(reg_idy) {
                         self.mem.set_reg(0x0F, 0x01);
                     } else {
                         self.mem.set_reg(0x0F, 0x01);
                     }
-                    self.mem.set_reg(reg_idx, diff as u8);
+                    self.mem.set_reg(reg_idx, diff);
                     self.mem.inc_pc();
                 },
                 ShiftRight(reg_idx, _) => {
@@ -228,13 +230,13 @@ impl Interpreter {
                     self.mem.inc_pc();
                 },
                 SubRegBackwards(reg_idx, reg_idy) => {
-                    let diff = self.mem.get_reg(reg_idy) as u16 - self.mem.get_reg(reg_idx) as u16;
+                    let diff = (Wrapping(self.mem.get_reg(reg_idy)) - Wrapping(self.mem.get_reg(reg_idx))).0;
                     if self.mem.get_reg(reg_idy) > self.mem.get_reg(reg_idx) {
                         self.mem.set_reg(0x0F, 0x01);
                     } else {
                         self.mem.set_reg(0x0F, 0x01);
                     }
-                    self.mem.set_reg(reg_idx, diff as u8);
+                    self.mem.set_reg(reg_idx, diff);
                     self.mem.inc_pc();
                 },
                 ShiftLeft(reg_idx, _) => {
@@ -292,7 +294,10 @@ impl Interpreter {
                         self.mem.inc_pc();
                     }
                 },
-                // SetRegToDelayTimer(u8), // Vx
+                SetRegToDelayTimer(reg_idx) => {
+                    self.mem.set_reg(reg_idx, self.mem.get_dt_reg());
+                    self.mem.inc_pc();
+                },
                 BlockOnKeypress(reg_idx) => {
                     let mut blocked = true;
                     while blocked {
@@ -307,11 +312,31 @@ impl Interpreter {
                     }
                     self.mem.inc_pc();
                 },
-                // SetDelayTimer(u8), // Vx
-                // SetSoundTimer(u8), // Vx
-                // AddI(u8), // Vx
-                // LoadSprite(u8), // Vx
-                // ToDecimal(u8), // Vx
+                SetDelayTimer(reg_idx) => {
+                    self.mem.set_dt_reg(self.mem.get_reg(reg_idx));
+                    self.mem.inc_pc();
+                },
+                SetSoundTimer(reg_idx) => {
+                    self.mem.set_st_reg(self.mem.get_reg(reg_idx));
+                    self.mem.inc_pc();
+                },
+                AddI(reg_idx) => {
+                    let sum = self.mem.get_reg(reg_idx) as u16 + self.mem.get_ireg();
+                    self.mem.set_ireg(sum);
+                    self.mem.inc_pc();
+                },
+                // LoadSprite(reg_idx) => {
+                   
+                // },
+                ToDecimal(reg_idx) => {
+                    let num = self.mem.get_reg(reg_idx);
+                    let hundreds: u16 = (num / 100).into();
+                    let tens: u16 = ((num % 100) / 10).into();
+                    let ones: u16 = (num % 10).into();
+                    let bcd = hundreds << 12 | tens << 8 | ones << 4;
+                    self.mem.set_ireg(bcd); 
+                    self.mem.inc_pc();
+                }
                 // CopyRegsIntoMemory(u8), // Vx
                 // CopyRegsFromMemory(u8), // Vx
 
@@ -353,8 +378,8 @@ struct Memory {
     stack: Vec<u16>,
     registers: [u8; 16],
     i_reg: u16,
-    dt_reg: u8,
-    st_reg: u8,
+    dt_reg: Arc<Mutex<u8>>,
+    st_reg: Arc<Mutex<u8>>,
 }
 
 impl Memory {
@@ -366,8 +391,8 @@ impl Memory {
             stack: Vec::new(),
             registers: [0x00; 16],
             i_reg: 0x0000,
-            dt_reg: 0x00,
-            st_reg: 0x00,
+            dt_reg: Arc::new(Mutex::new(0x00)),
+            st_reg: Arc::new(Mutex::new(0x00)),
         };
         mem.load_program(program);
         return mem;
@@ -415,19 +440,35 @@ impl Memory {
     }
 
     fn get_dt_reg(&self) -> u8 {
-        return self.dt_reg;
+        return self.dt_reg.lock().unwrap().clone();
     }
 
     fn set_dt_reg(&mut self, value: u8) {
-        self.dt_reg = value;
+        let dt_arc_clone = self.dt_reg.clone();
+        thread::spawn(move || {
+            thread::sleep(time::Duration::from_secs_f64(1.0 / 60.0));
+            let dt = *dt_arc_clone.lock().unwrap();
+            if dt == 0 {
+                return;
+            }
+            *dt_arc_clone.lock().unwrap() -= 1;
+        });
     }
 
     fn get_st_reg(&self) -> u8 {
-        return self.st_reg;
+        return self.st_reg.lock().unwrap().clone();
     }
 
     fn set_st_reg(&mut self, value: u8) {
-        self.st_reg = value;
+        let st_arc_clone = self.st_reg.clone();
+        thread::spawn(move || {
+            thread::sleep(time::Duration::from_secs_f64(1.0 / 60.0));
+            let st = *st_arc_clone.lock().unwrap();
+            if st == 0 {
+                return;
+            }
+            *st_arc_clone.lock().unwrap() -= 1;
+        });
     }
 
     fn get_pc(&self) -> usize {

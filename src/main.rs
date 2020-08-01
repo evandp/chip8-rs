@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::thread;
 
 fn main() -> io::Result<()> {
-    let mut f = File::open("roms/PONG2")?;
+    let mut f = File::open("roms/GUESS")?;
     let mut read_buffer = Vec::new();
     f.read_to_end(&mut read_buffer)?;
     let mut first_byte = true;

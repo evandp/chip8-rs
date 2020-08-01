@@ -49,7 +49,7 @@ impl GameState {
     }
 
     pub fn get_key_state(&self, key_id: u8) -> KeyState {
-        self.keys[(key_id - 1) as usize]
+        self.keys[(key_id) as usize]
     }
 }
 
@@ -83,21 +83,21 @@ impl Game {
             if let Some(args) = e.press_args() {
                 let mut keys = self.state.lock().unwrap().keys;
                 match args {
-                    Button::Keyboard(Key::D1) => {keys[0] = KeyState::Pressed}
-                    Button::Keyboard(Key::D2) => {keys[1] = KeyState::Pressed}
-                    Button::Keyboard(Key::D3) => {keys[2] = KeyState::Pressed}
-                    Button::Keyboard(Key::D4) => {keys[3] = KeyState::Pressed}
+                    Button::Keyboard(Key::X) => {keys[0] = KeyState::Pressed}
+                    Button::Keyboard(Key::D1) => {keys[1] = KeyState::Pressed}
+                    Button::Keyboard(Key::D2) => {keys[2] = KeyState::Pressed}
+                    Button::Keyboard(Key::D3) => {keys[3] = KeyState::Pressed}
                     Button::Keyboard(Key::Q) => {keys[4] = KeyState::Pressed}
                     Button::Keyboard(Key::W) => {keys[5] = KeyState::Pressed}
                     Button::Keyboard(Key::E) => {keys[6] = KeyState::Pressed}
-                    Button::Keyboard(Key::R) => {keys[7] = KeyState::Pressed}
-                    Button::Keyboard(Key::A) => {keys[8] = KeyState::Pressed}
-                    Button::Keyboard(Key::S) => {keys[9] = KeyState::Pressed}
-                    Button::Keyboard(Key::D) => {keys[10] = KeyState::Pressed}
-                    Button::Keyboard(Key::F) => {keys[11] = KeyState::Pressed}
-                    Button::Keyboard(Key::Z) => {keys[12] = KeyState::Pressed}
-                    Button::Keyboard(Key::X) => {keys[13] = KeyState::Pressed}
-                    Button::Keyboard(Key::C) => {keys[14] = KeyState::Pressed}
+                    Button::Keyboard(Key::A) => {keys[7] = KeyState::Pressed}
+                    Button::Keyboard(Key::S) => {keys[8] = KeyState::Pressed}
+                    Button::Keyboard(Key::D) => {keys[9] = KeyState::Pressed}
+                    Button::Keyboard(Key::Z) => {keys[10] = KeyState::Pressed}
+                    Button::Keyboard(Key::C) => {keys[11] = KeyState::Pressed}
+                    Button::Keyboard(Key::D4) => {keys[12] = KeyState::Pressed}
+                    Button::Keyboard(Key::R) => {keys[13] = KeyState::Pressed}
+                    Button::Keyboard(Key::F) => {keys[14] = KeyState::Pressed}
                     Button::Keyboard(Key::V) => {keys[15] = KeyState::Pressed}
                     _ => {}
                 }
@@ -105,21 +105,21 @@ impl Game {
             if let Some(args) = e.release_args() {
                 let mut keys = self.state.lock().unwrap().keys;
                 match args {
-                    Button::Keyboard(Key::D1) => {keys[0] = KeyState::Released}
-                    Button::Keyboard(Key::D2) => {keys[1] = KeyState::Released}
-                    Button::Keyboard(Key::D3) => {keys[2] = KeyState::Released}
-                    Button::Keyboard(Key::D4) => {keys[3] = KeyState::Released}
+                    Button::Keyboard(Key::X) => {keys[0] = KeyState::Released}
+                    Button::Keyboard(Key::D1) => {keys[1] = KeyState::Released}
+                    Button::Keyboard(Key::D2) => {keys[2] = KeyState::Released}
+                    Button::Keyboard(Key::D3) => {keys[3] = KeyState::Released}
                     Button::Keyboard(Key::Q) => {keys[4] = KeyState::Released}
                     Button::Keyboard(Key::W) => {keys[5] = KeyState::Released}
                     Button::Keyboard(Key::E) => {keys[6] = KeyState::Released}
-                    Button::Keyboard(Key::R) => {keys[7] = KeyState::Released}
-                    Button::Keyboard(Key::A) => {keys[8] = KeyState::Released}
-                    Button::Keyboard(Key::S) => {keys[9] = KeyState::Released}
-                    Button::Keyboard(Key::D) => {keys[10] = KeyState::Released}
-                    Button::Keyboard(Key::F) => {keys[11] = KeyState::Released}
-                    Button::Keyboard(Key::Z) => {keys[12] = KeyState::Released}
-                    Button::Keyboard(Key::X) => {keys[13] = KeyState::Released}
-                    Button::Keyboard(Key::C) => {keys[14] = KeyState::Released}
+                    Button::Keyboard(Key::A) => {keys[7] = KeyState::Released}
+                    Button::Keyboard(Key::S) => {keys[8] = KeyState::Released}
+                    Button::Keyboard(Key::D) => {keys[9] = KeyState::Released}
+                    Button::Keyboard(Key::Z) => {keys[10] = KeyState::Released}
+                    Button::Keyboard(Key::C) => {keys[11] = KeyState::Released}
+                    Button::Keyboard(Key::D4) => {keys[12] = KeyState::Released}
+                    Button::Keyboard(Key::R) => {keys[13] = KeyState::Released}
+                    Button::Keyboard(Key::F) => {keys[14] = KeyState::Released}
                     Button::Keyboard(Key::V) => {keys[15] = KeyState::Released}
                     _ => {}
                 }
