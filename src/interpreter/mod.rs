@@ -137,8 +137,11 @@ impl Interpreter {
             let instruction = decode(byte_code);
             use Instruction::*;
             println!("{:?}: {:?}", address, instruction);
-            // self.screen.print();
             match instruction {
+                ClearDisplay => {
+                    self.game.lock().unwrap().clear_display();
+                    self.mem.inc_pc();
+                },
                 ReturnFromSubroutine => {
                     if let Some(addr) = self.mem.pop_stack() {
                         self.mem.set_pc(addr);
@@ -272,11 +275,16 @@ impl Interpreter {
                     let i = self.mem.get_ireg();
                     for offset in 0..n {
                         let addr = i + offset as u16;
-                        let byte = self.mem.get(addr as usize);
+                        let byte = self.mem.get(addr);
+                        if reg_idx == 6 && reg_idy == 7 {
+                            println!("{}", byte);
+                        }
                         bytes.push(byte);
                     }
                     self.display_byte_sprite(x as usize, y as usize, bytes);
                     self.mem.inc_pc();
+                    // println!("{}", n);
+                    // thread::sleep(time::Duration::from_millis(200));
                 },
                 SkipIfPressed(reg_idx) => {
                     let key_id = self.mem.get_reg(reg_idx);
@@ -333,13 +341,28 @@ impl Interpreter {
                     let hundreds: u16 = (num / 100).into();
                     let tens: u16 = ((num % 100) / 10).into();
                     let ones: u16 = (num % 10).into();
-                    let bcd = hundreds << 12 | tens << 8 | ones << 4;
+                    let bcd = ((hundreds << 8) & 0x0F00) | ((tens << 4) & 0x00F0) | (ones & 0x000F);
                     self.mem.set_ireg(bcd); 
                     self.mem.inc_pc();
                 }
-                // CopyRegsIntoMemory(u8), // Vx
-                // CopyRegsFromMemory(u8), // Vx
-
+                CopyRegsIntoMemory(reg_idx) => {
+                    let mut loc = self.mem.get_ireg();
+                    for reg_id in 0..reg_idx+1 {
+                        self.mem.set(loc, self.mem.get_reg(reg_id));
+                        loc += 1;
+                    }
+                    self.mem.set_ireg(loc);
+                    self.mem.inc_pc();
+                },
+                CopyRegsFromMemory(reg_idx) => {
+                    let mut loc = self.mem.get_ireg();
+                    for reg_id in 0..reg_idx+1 {
+                        self.mem.set_reg(reg_id, self.mem.get(loc));
+                        loc += 1;
+                    }
+                    self.mem.set_ireg(loc);
+                    self.mem.inc_pc();
+                },
                 InvalidInstruction(byte_code) => {
                     println!("Error: {:X} unrecognized", byte_code);
                     return
@@ -349,7 +372,7 @@ impl Interpreter {
                     self.mem.inc_pc();
                 },
             }
-            thread::sleep(time::Duration::from_millis(1));
+            thread::sleep(time::Duration::from_millis(3));
         }
     }
 
@@ -363,7 +386,9 @@ impl Interpreter {
                     0x01 => pixel_state = true,
                     _ => eprintln!("bit is in invalid state"),
                 }
-                self.game.lock().unwrap().set_pixel(x+j, y+i, pixel_state);
+                let mut game = self.game.lock().unwrap();
+                let prev_pixel = game.get_pixel(x+j, y+i);
+                game.set_pixel(x+j, y+i, pixel_state ^ prev_pixel);
             }
         }
         // TODO return true if occluded
@@ -373,7 +398,7 @@ impl Interpreter {
 
 struct Memory {
     ram: [u8; 0xFFF],
-    program_addr: usize,
+    program_addr: u16,
     program_counter: usize,
     stack: Vec<u16>,
     registers: [u8; 16],
@@ -488,11 +513,11 @@ impl Memory {
         return self.stack.pop()
     }
 
-    fn get(&self, addr: usize) -> u8 {
-        return self.ram[addr];
+    fn get(&self, addr: u16) -> u8 {
+        return self.ram[addr as usize];
     }
 
-    fn set(&mut self, addr: usize, value: u8) {
-        self.ram[addr] = value;
+    fn set(&mut self, addr: u16, value: u8) {
+        self.ram[addr as usize] = value;
     }
 }

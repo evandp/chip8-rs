@@ -48,6 +48,10 @@ impl GameState {
         self.display[x % WIDTH][y % HEIGHT]
     }
 
+    pub fn clear_display(&mut self) {
+        self.display = [[false; HEIGHT as usize]; WIDTH as usize];
+    }
+
     pub fn get_key_state(&self, key_id: u8) -> KeyState {
         self.keys[(key_id) as usize]
     }
