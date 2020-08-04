@@ -11,12 +11,14 @@ use piston::window::WindowSettings;
 use crate::game::piston::{PressEvent, ReleaseEvent, Button, Key};
 use std::sync::Mutex;
 use std::sync::Arc;
+use std::sync::atomic::AtomicBool;
 use std::{thread, time};
+use device_query::{DeviceQuery, DeviceState, Keycode};
 
 const WIDTH: usize = 80;
 const HEIGHT: usize = 64;
 
-#[derive(Copy, Clone, PartialEq)]
+#[derive(Copy, Clone, PartialEq, Debug)]
 pub enum KeyState {
     Pressed,
     Released,
@@ -78,6 +80,10 @@ impl Game {
 
     pub fn start(&mut self) {
         let mut events = Events::new(EventSettings::new());
+        let ds = DeviceState::new();
+        let key_list = vec!(Keycode::X, Keycode::Key1, Keycode::Key2, Keycode::Key3, 
+            Keycode::Q, Keycode::W, Keycode::E, Keycode::A, Keycode::S, Keycode::D, 
+            Keycode::Z, Keycode::C, Keycode::Key4, Keycode::R, Keycode::F, Keycode::V);
         while let Some(e) = events.next({
             // scoping so lock gets released
             &mut self.window
@@ -85,48 +91,50 @@ impl Game {
             if let Some(args) = e.render_args() {
                 self.render(&args);
             }
-            if let Some(args) = e.press_args() {
-                let mut keys = self.state.lock().unwrap().keys;
-                match args {
-                    Button::Keyboard(Key::X) => {keys[0] = KeyState::Pressed}
-                    Button::Keyboard(Key::D1) => {keys[1] = KeyState::Pressed}
-                    Button::Keyboard(Key::D2) => {keys[2] = KeyState::Pressed}
-                    Button::Keyboard(Key::D3) => {keys[3] = KeyState::Pressed}
-                    Button::Keyboard(Key::Q) => {keys[4] = KeyState::Pressed}
-                    Button::Keyboard(Key::W) => {keys[5] = KeyState::Pressed}
-                    Button::Keyboard(Key::E) => {keys[6] = KeyState::Pressed}
-                    Button::Keyboard(Key::A) => {keys[7] = KeyState::Pressed}
-                    Button::Keyboard(Key::S) => {keys[8] = KeyState::Pressed}
-                    Button::Keyboard(Key::D) => {keys[9] = KeyState::Pressed}
-                    Button::Keyboard(Key::Z) => {keys[10] = KeyState::Pressed}
-                    Button::Keyboard(Key::C) => {keys[11] = KeyState::Pressed}
-                    Button::Keyboard(Key::D4) => {keys[12] = KeyState::Pressed}
-                    Button::Keyboard(Key::R) => {keys[13] = KeyState::Pressed}
-                    Button::Keyboard(Key::F) => {keys[14] = KeyState::Pressed}
-                    Button::Keyboard(Key::V) => {keys[15] = KeyState::Pressed}
+            let key_presses: Vec<Keycode> = ds.get_keys();
+            // let mut keys = self.state.lock().unwrap().keys;
+            for key in key_presses.iter() {
+                match key {
+                    Keycode::X => {self.state.lock().unwrap().keys[0] = KeyState::Pressed}
+                    Keycode::Key1 => {self.state.lock().unwrap().keys[1] = KeyState::Pressed}
+                    Keycode::Key2 => {self.state.lock().unwrap().keys[2] = KeyState::Pressed}
+                    Keycode::Key3 => {self.state.lock().unwrap().keys[3] = KeyState::Pressed}
+                    Keycode::Q => {self.state.lock().unwrap().keys[4] = KeyState::Pressed}
+                    Keycode::W => {self.state.lock().unwrap().keys[5] = KeyState::Pressed}
+                    Keycode::E => {self.state.lock().unwrap().keys[6] = KeyState::Pressed}
+                    Keycode::A => {self.state.lock().unwrap().keys[7] = KeyState::Pressed}
+                    Keycode::S => {self.state.lock().unwrap().keys[8] = KeyState::Pressed}
+                    Keycode::D => {self.state.lock().unwrap().keys[9] = KeyState::Pressed}
+                    Keycode::Z => {self.state.lock().unwrap().keys[10] = KeyState::Pressed}
+                    Keycode::C => {self.state.lock().unwrap().keys[11] = KeyState::Pressed}
+                    Keycode::Key4 => {self.state.lock().unwrap().keys[12] = KeyState::Pressed}
+                    Keycode::R => {self.state.lock().unwrap().keys[13] = KeyState::Pressed}
+                    Keycode::F => {self.state.lock().unwrap().keys[14] = KeyState::Pressed}
+                    Keycode::V => {self.state.lock().unwrap().keys[15] = KeyState::Pressed}
                     _ => {}
                 }
             }
-            if let Some(args) = e.release_args() {
-                let mut keys = self.state.lock().unwrap().keys;
-                match args {
-                    Button::Keyboard(Key::X) => {keys[0] = KeyState::Released}
-                    Button::Keyboard(Key::D1) => {keys[1] = KeyState::Released}
-                    Button::Keyboard(Key::D2) => {keys[2] = KeyState::Released}
-                    Button::Keyboard(Key::D3) => {keys[3] = KeyState::Released}
-                    Button::Keyboard(Key::Q) => {keys[4] = KeyState::Released}
-                    Button::Keyboard(Key::W) => {keys[5] = KeyState::Released}
-                    Button::Keyboard(Key::E) => {keys[6] = KeyState::Released}
-                    Button::Keyboard(Key::A) => {keys[7] = KeyState::Released}
-                    Button::Keyboard(Key::S) => {keys[8] = KeyState::Released}
-                    Button::Keyboard(Key::D) => {keys[9] = KeyState::Released}
-                    Button::Keyboard(Key::Z) => {keys[10] = KeyState::Released}
-                    Button::Keyboard(Key::C) => {keys[11] = KeyState::Released}
-                    Button::Keyboard(Key::D4) => {keys[12] = KeyState::Released}
-                    Button::Keyboard(Key::R) => {keys[13] = KeyState::Released}
-                    Button::Keyboard(Key::F) => {keys[14] = KeyState::Released}
-                    Button::Keyboard(Key::V) => {keys[15] = KeyState::Released}
-                    _ => {}
+            for key in key_list.iter() {
+                if !key_presses.contains(&key) {
+                    match key {
+                        Keycode::X => {self.state.lock().unwrap().keys[0] = KeyState::Released}
+                        Keycode::Key1 => {self.state.lock().unwrap().keys[1] = KeyState::Released}
+                        Keycode::Key2 => {self.state.lock().unwrap().keys[2] = KeyState::Released}
+                        Keycode::Key3 => {self.state.lock().unwrap().keys[3] = KeyState::Released}
+                        Keycode::Q => {self.state.lock().unwrap().keys[4] = KeyState::Released}
+                        Keycode::W => {self.state.lock().unwrap().keys[5] = KeyState::Released}
+                        Keycode::E => {self.state.lock().unwrap().keys[6] = KeyState::Released}
+                        Keycode::A => {self.state.lock().unwrap().keys[7] = KeyState::Released}
+                        Keycode::S => {self.state.lock().unwrap().keys[8] = KeyState::Released}
+                        Keycode::D => {self.state.lock().unwrap().keys[9] = KeyState::Released}
+                        Keycode::Z => {self.state.lock().unwrap().keys[10] = KeyState::Released}
+                        Keycode::C => {self.state.lock().unwrap().keys[11] = KeyState::Released}
+                        Keycode::Key4 => {self.state.lock().unwrap().keys[12] = KeyState::Released}
+                        Keycode::R => {self.state.lock().unwrap().keys[13] = KeyState::Released}
+                        Keycode::F => {self.state.lock().unwrap().keys[14] = KeyState::Released}
+                        Keycode::V => {self.state.lock().unwrap().keys[15] = KeyState::Released}
+                        _ => {}
+                    }
                 }
             }
             thread::sleep(time::Duration::from_millis(1));

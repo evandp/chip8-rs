@@ -166,14 +166,8 @@ impl Interpreter {
                 },
                 SkipNeq(reg_idx, byte) => {
                     if self.mem.get_reg(reg_idx) != byte {
-                        if reg_idx == 6 {
-                            println!("Skipping {}", self.mem.get_reg(reg_idx));
-                        }
                         self.mem.double_inc_pc();
                     } else {
-                        if reg_idx == 6 {
-                            println!("Continuing {}", self.mem.get_reg(reg_idx));
-                        }
                         self.mem.inc_pc();
                     }
                 },
@@ -311,14 +305,17 @@ impl Interpreter {
                 BlockOnKeypress(reg_idx) => {
                     let mut blocked = true;
                     while blocked {
-                        let state = self.game.lock().unwrap();
-                        for key_id in 0..16 {
-                            if state.get_key_state(key_id) == KeyState::Pressed {
-                                blocked = false;
-                                self.mem.set_reg(reg_idx, key_id);
+                        {
+                            let state = self.game.lock().unwrap();
+                            for key_id in 0..16 {
+                                if state.get_key_state(key_id) == KeyState::Pressed {
+                                    println!("Found a key press!");
+                                    blocked = false;
+                                    self.mem.set_reg(reg_idx, key_id);
+                                }
                             }
                         }
-                        thread::sleep(time::Duration::from_millis(1));
+                        thread::sleep(time::Duration::from_millis(100));
                     }
                     self.mem.inc_pc();
                 },
