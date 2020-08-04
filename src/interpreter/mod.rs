@@ -2,6 +2,8 @@ use crate::game::{GameState, KeyState};
 use std::{thread, time};
 use std::sync::{Mutex, Arc};
 use std::num::Wrapping;
+use std::sync::atomic::AtomicU8;
+use std::sync::atomic::Ordering;
 
 // Instructions associated with their decode scheme
 #[derive(Debug)]
@@ -154,7 +156,6 @@ impl Interpreter {
                 CallSubroutine(addr) => {
                     self.mem.push_stack(self.mem.get_pc() as u16 + 2);
                     self.mem.set_pc(addr);
-                    println!("{:X}", byte_code);
                 },
                 SkipEq(reg_idx, byte) => {
                     if self.mem.get_reg(reg_idx) == byte {
@@ -165,8 +166,14 @@ impl Interpreter {
                 },
                 SkipNeq(reg_idx, byte) => {
                     if self.mem.get_reg(reg_idx) != byte {
+                        if reg_idx == 6 {
+                            println!("Skipping {}", self.mem.get_reg(reg_idx));
+                        }
                         self.mem.double_inc_pc();
                     } else {
+                        if reg_idx == 6 {
+                            println!("Continuing {}", self.mem.get_reg(reg_idx));
+                        }
                         self.mem.inc_pc();
                     }
                 },
@@ -211,7 +218,7 @@ impl Interpreter {
                     if carry {
                         self.mem.set_reg(0x0F, 0x01);
                     } else {
-                        self.mem.set_reg(0x0F, 0x01);
+                        self.mem.set_reg(0x0F, 0x00);
                     }
                     self.mem.set_reg(reg_idx, sum);
                     self.mem.inc_pc();
@@ -221,7 +228,7 @@ impl Interpreter {
                     if self.mem.get_reg(reg_idx) > self.mem.get_reg(reg_idy) {
                         self.mem.set_reg(0x0F, 0x01);
                     } else {
-                        self.mem.set_reg(0x0F, 0x01);
+                        self.mem.set_reg(0x0F, 0x00);
                     }
                     self.mem.set_reg(reg_idx, diff);
                     self.mem.inc_pc();
@@ -237,7 +244,7 @@ impl Interpreter {
                     if self.mem.get_reg(reg_idy) > self.mem.get_reg(reg_idx) {
                         self.mem.set_reg(0x0F, 0x01);
                     } else {
-                        self.mem.set_reg(0x0F, 0x01);
+                        self.mem.set_reg(0x0F, 0x00);
                     }
                     self.mem.set_reg(reg_idx, diff);
                     self.mem.inc_pc();
@@ -276,15 +283,10 @@ impl Interpreter {
                     for offset in 0..n {
                         let addr = i + offset as u16;
                         let byte = self.mem.get(addr);
-                        if reg_idx == 6 && reg_idy == 7 {
-                            println!("{}", byte);
-                        }
                         bytes.push(byte);
                     }
                     self.display_byte_sprite(x as usize, y as usize, bytes);
                     self.mem.inc_pc();
-                    // println!("{}", n);
-                    // thread::sleep(time::Duration::from_millis(200));
                 },
                 SkipIfPressed(reg_idx) => {
                     let key_id = self.mem.get_reg(reg_idx);
@@ -403,8 +405,8 @@ struct Memory {
     stack: Vec<u16>,
     registers: [u8; 16],
     i_reg: u16,
-    dt_reg: Arc<Mutex<u8>>,
-    st_reg: Arc<Mutex<u8>>,
+    dt_reg: Arc<AtomicU8>,
+    st_reg: Arc<AtomicU8>,
 }
 
 impl Memory {
@@ -416,8 +418,8 @@ impl Memory {
             stack: Vec::new(),
             registers: [0x00; 16],
             i_reg: 0x0000,
-            dt_reg: Arc::new(Mutex::new(0x00)),
-            st_reg: Arc::new(Mutex::new(0x00)),
+            dt_reg: Arc::new(AtomicU8::new(0x00)),
+            st_reg: Arc::new(AtomicU8::new(0x00)),
         };
         mem.load_program(program);
         return mem;
@@ -465,34 +467,36 @@ impl Memory {
     }
 
     fn get_dt_reg(&self) -> u8 {
-        return self.dt_reg.lock().unwrap().clone();
+        return self.dt_reg.load(Ordering::SeqCst);
     }
 
     fn set_dt_reg(&mut self, value: u8) {
-        let dt_arc_clone = self.dt_reg.clone();
+        self.dt_reg.store(value, Ordering::SeqCst);
+        let dt_reg = self.dt_reg.clone();
         thread::spawn(move || {
-            thread::sleep(time::Duration::from_secs_f64(1.0 / 60.0));
-            let dt = *dt_arc_clone.lock().unwrap();
-            if dt == 0 {
-                return;
+            let mut timer = dt_reg.load(Ordering::SeqCst);
+            while timer > 0 {
+                thread::sleep(time::Duration::from_secs_f64(1.0 / 60.0));
+                dt_reg.store(timer - 1, Ordering::SeqCst);
+                timer = dt_reg.load(Ordering::SeqCst);
             }
-            *dt_arc_clone.lock().unwrap() -= 1;
         });
     }
 
     fn get_st_reg(&self) -> u8 {
-        return self.st_reg.lock().unwrap().clone();
+        return self.st_reg.load(Ordering::SeqCst);
     }
 
     fn set_st_reg(&mut self, value: u8) {
-        let st_arc_clone = self.st_reg.clone();
+        self.st_reg.store(value, Ordering::SeqCst);
+        let st_reg = self.st_reg.clone();
         thread::spawn(move || {
-            thread::sleep(time::Duration::from_secs_f64(1.0 / 60.0));
-            let st = *st_arc_clone.lock().unwrap();
-            if st == 0 {
-                return;
+            let mut timer = st_reg.load(Ordering::SeqCst);
+            while timer > 0 {
+                thread::sleep(time::Duration::from_secs_f64(1.0 / 60.0));
+                st_reg.store(timer - 1, Ordering::SeqCst);
+                timer = st_reg.load(Ordering::SeqCst);
             }
-            *st_arc_clone.lock().unwrap() -= 1;
         });
     }
 

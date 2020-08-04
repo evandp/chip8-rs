@@ -11,6 +11,7 @@ use piston::window::WindowSettings;
 use crate::game::piston::{PressEvent, ReleaseEvent, Button, Key};
 use std::sync::Mutex;
 use std::sync::Arc;
+use std::{thread, time};
 
 const WIDTH: usize = 80;
 const HEIGHT: usize = 64;
@@ -128,6 +129,7 @@ impl Game {
                     _ => {}
                 }
             }
+            thread::sleep(time::Duration::from_millis(1));
         }
     }
 
