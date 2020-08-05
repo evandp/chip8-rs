@@ -138,7 +138,7 @@ impl Interpreter {
             let address = self.mem.get_pc();
             let instruction = decode(byte_code);
             use Instruction::*;
-            println!("{:?}: {:?}", address, instruction);
+            // println!("{:?}: {:?}", address, instruction);
             match instruction {
                 ClearDisplay => {
                     self.game.lock().unwrap().clear_display();
@@ -279,7 +279,12 @@ impl Interpreter {
                         let byte = self.mem.get(addr);
                         bytes.push(byte);
                     }
-                    self.display_byte_sprite(x as usize, y as usize, bytes);
+                    let occluded = self.display_byte_sprite(x as usize, y as usize, bytes);
+                    if occluded {
+                        self.mem.set_reg(0x0F, 0x01);
+                    } else {
+                        self.mem.set_reg(0x0F, 0x00);
+                    }
                     self.mem.inc_pc();
                 },
                 SkipIfPressed(reg_idx) => {
@@ -332,9 +337,13 @@ impl Interpreter {
                     self.mem.set_ireg(sum);
                     self.mem.inc_pc();
                 },
-                // LoadSprite(reg_idx) => {
-                   
-                // },
+                LoadSprite(reg_idx) => {
+                    let num = self.mem.get_reg(reg_idx) as u16;
+                    if num <= 0xF {
+                        self.mem.set_ireg(num * 5);
+                    }
+                    self.mem.inc_pc();
+                },
                 ToDecimal(reg_idx) => {
                     let num = self.mem.get_reg(reg_idx);
                     let hundreds: u16 = (num / 100).into();
@@ -376,6 +385,7 @@ impl Interpreter {
     }
 
     fn display_byte_sprite(&mut self, x: usize, y: usize, bytes: Vec<u8>) -> bool {
+        let mut occluded = false;
         for (i, byte) in bytes.iter().enumerate() {
             for j in 0..8 {
                 let bit = (*byte & (0x80 >> j)) >> (7-j);
@@ -387,11 +397,13 @@ impl Interpreter {
                 }
                 let mut game = self.game.lock().unwrap();
                 let prev_pixel = game.get_pixel(x+j, y+i);
+                if prev_pixel == true && pixel_state ^ prev_pixel == false {
+                    occluded = true;
+                }
                 game.set_pixel(x+j, y+i, pixel_state ^ prev_pixel);
             }
         }
-        // TODO return true if occluded
-        return false;
+        return occluded;
     }
 }
 
@@ -419,7 +431,39 @@ impl Memory {
             st_reg: Arc::new(AtomicU8::new(0x00)),
         };
         mem.load_program(program);
+        mem.init_sprites();
         return mem;
+    }
+
+    fn num_to_sprite(&self, num: usize) -> [u8; 5] {
+        match num {
+            0x0 => [0xF0, 0x90, 0x90, 0x90, 0xF0],
+            0x1 => [0x20, 0x60, 0x20, 0x20, 0x70],
+            0x2 => [0xF0, 0x10, 0xF0, 0x80, 0xF0],
+            0x3 => [0xF0, 0x10, 0xF0, 0x10, 0x10],
+            0x4 => [0x90, 0x90, 0xF0, 0x10, 0x10],
+            0x5 => [0xF0, 0x80, 0xF0, 0x10, 0xF0],
+            0x6 => [0xF0, 0x80, 0xF0, 0x90, 0xF0],
+            0x7 => [0xF0, 0x10, 0x20, 0x40, 0x40],
+            0x8 => [0xF0, 0x90, 0xF0, 0x90, 0xF0],
+            0x9 => [0xF0, 0x90, 0xF0, 0x10, 0xF0],
+            0xA => [0xF0, 0x90, 0xF0, 0x90, 0x90],
+            0xB => [0xE0, 0x90, 0xE0, 0x90, 0xE0],
+            0xC => [0xF0, 0x80, 0x80, 0x80, 0xF0],
+            0xD => [0xE0, 0x90, 0x90, 0x90, 0xE0],
+            0xE => [0xF0, 0x80, 0xF0, 0x80, 0xF0],
+            0xF => [0xF0, 0x80, 0xF0, 0x80, 0x80],
+            _ => [0x00; 5],
+        }
+    }
+
+    fn init_sprites(&mut self) {
+        for i in 0x0..0xF as usize {
+            let sprite = self.num_to_sprite(i);
+            for (j, byte) in sprite.iter().enumerate() {
+                self.ram[i*5 + j] = *byte;
+            }
+        }
     }
 
     fn load_program(&mut self, program: Vec<u16>) {
